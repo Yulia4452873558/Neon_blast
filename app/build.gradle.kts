@@ -13,10 +13,19 @@ android {
         applicationId = "ru.yulia.neonblast"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("key_store")
+            storePassword = "xTf49sjAFFoAbYdJWm1"
+            keyAlias = "key_neon_blast"
+            keyPassword = "xTf49sjAFFoAbYdJWm1"
+        }
     }
 
     flavorDimensions += "store"
@@ -33,9 +42,9 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }
