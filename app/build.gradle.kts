@@ -13,8 +13,8 @@ android {
         applicationId = "ru.yulia.neonblast"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,6 +37,14 @@ android {
             buildConfigField("String", "AD_UNIT_BANNER", "\"R-M-20182160-2\"")
             buildConfigField("String", "AD_UNIT_INTERSTITIAL", "\"R-M-20182160-1\"")
             buildConfigField("String", "AD_UNIT_REWARDED", "\"R-M-20182160-4\"")
+            buildConfigField("String", "AD_UNIT_APP_OPEN", "\"R-M-20182160-5\"")
+        }
+        create("huawei") {
+            dimension = "store"
+            buildConfigField("String", "AD_UNIT_BANNER", "\"R-M-20239011-2\"")
+            buildConfigField("String", "AD_UNIT_INTERSTITIAL", "\"R-M-20239011-3\"")
+            buildConfigField("String", "AD_UNIT_REWARDED", "\"R-M-20239011-1\"")
+            buildConfigField("String", "AD_UNIT_APP_OPEN", "\"R-M-20239011-4\"")
         }
     }
 

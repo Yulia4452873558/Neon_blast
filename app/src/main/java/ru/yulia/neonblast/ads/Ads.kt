@@ -10,6 +10,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import ru.yulia.neonblast.BuildConfig
+import com.yandex.mobile.ads.appopenad.AppOpenAd
+import com.yandex.mobile.ads.appopenad.AppOpenAdEventListener
+import com.yandex.mobile.ads.appopenad.AppOpenAdLoadListener
+import com.yandex.mobile.ads.appopenad.AppOpenAdLoader
 import com.yandex.mobile.ads.common.AdError
 import com.yandex.mobile.ads.common.AdRequest
 import com.yandex.mobile.ads.common.AdRequestError
@@ -29,10 +33,13 @@ object AdUnits {
     val banner: String = if (BuildConfig.DEBUG) "demo-banner-yandex" else BuildConfig.AD_UNIT_BANNER
     val interstitial: String = if (BuildConfig.DEBUG) "demo-interstitial-yandex" else BuildConfig.AD_UNIT_INTERSTITIAL
     val rewarded: String = if (BuildConfig.DEBUG) "demo-rewarded-yandex" else BuildConfig.AD_UNIT_REWARDED
+    val appOpen: String = if (BuildConfig.DEBUG) "demo-appopenad-yandex" else BuildConfig.AD_UNIT_APP_OPEN
 }
 
 private const val TAG = "NeonAds"
 private const val RETRY_MS = 30_000L
+/** A preloaded app-open ad goes stale after a while; drop it and load a fresh one. */
+private const val APP_OPEN_TTL_MS = 4 * 60 * 60 * 1000L
 
 /**
  * Keeps one interstitial and one rewarded ad preloaded and shows them on demand.
@@ -43,11 +50,18 @@ class AdsManager(context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private val interstitialLoader = InterstitialAdLoader(context)
     private val rewardedLoader = RewardedAdLoader(context)
+    private val appOpenLoader = AppOpenAdLoader(context)
 
     private var interstitial: InterstitialAd? = null
     private var interstitialLoading = false
     private var rewarded: RewardedAd? = null
     private var rewardedLoading = false
+    private var appOpen: AppOpenAd? = null
+    private var appOpenLoading = false
+    private var appOpenLoadedAt = 0L
+
+    /** Called on the main thread every time a fresh app-open ad has finished loading. */
+    var onAppOpenLoaded: (() -> Unit)? = null
 
     /** True while an ad covers the screen. */
     var isShowing = false
@@ -60,6 +74,7 @@ class AdsManager(context: Context) {
     fun preload() {
         loadInterstitial()
         loadRewarded()
+        loadAppOpen()
     }
 
     // --- interstitial ---------------------------------------------------------
@@ -171,6 +186,66 @@ class AdsManager(context: Context) {
             override fun onAdClicked() = Unit
             override fun onAdImpression(impressionData: ImpressionData?) = Unit
             override fun onRewarded(reward: Reward) = onReward()
+        })
+        ad.show(activity)
+        return true
+    }
+
+    // --- app open (shown when the app is launched or brought back to the foreground) ---
+
+    private fun loadAppOpen() {
+        if (appOpen != null || appOpenLoading) return
+        appOpenLoading = true
+        appOpenLoader.loadAd(
+            AdRequest.Builder(AdUnits.appOpen).build(),
+            object : AppOpenAdLoadListener {
+                override fun onAdLoaded(ad: AppOpenAd) {
+                    appOpenLoading = false
+                    appOpen = ad
+                    appOpenLoadedAt = System.currentTimeMillis()
+                    onAppOpenLoaded?.invoke()
+                }
+
+                override fun onAdFailedToLoad(error: AdRequestError) {
+                    appOpenLoading = false
+                    Log.w(TAG, "app open failed: ${error.description}")
+                    handler.postDelayed(::loadAppOpen, RETRY_MS)
+                }
+            },
+        )
+    }
+
+    /** Shows the app-open ad if one is ready. Returns false if nothing was shown. */
+    fun showAppOpen(activity: Activity?): Boolean {
+        val ad = appOpen
+        if (ad != null && System.currentTimeMillis() - appOpenLoadedAt > APP_OPEN_TTL_MS) {
+            appOpen = null
+            loadAppOpen()
+            return false
+        }
+        if (ad == null || activity == null || activity.isFinishing || isShowing) {
+            loadAppOpen()
+            return false
+        }
+        appOpen = null
+        isShowing = true
+        var finished = false
+        fun finish() {
+            if (finished) return
+            finished = true
+            isShowing = false
+            ad.setAdEventListener(null)
+            loadAppOpen()
+        }
+        ad.setAdEventListener(object : AppOpenAdEventListener {
+            override fun onAdShown() = Unit
+            override fun onAdFailedToShow(adError: AdError) {
+                Log.w(TAG, "app open show failed: ${adError.description}")
+                finish()
+            }
+            override fun onAdDismissed() = finish()
+            override fun onAdClicked() = Unit
+            override fun onAdImpression(impressionData: ImpressionData?) = Unit
         })
         ad.show(activity)
         return true
